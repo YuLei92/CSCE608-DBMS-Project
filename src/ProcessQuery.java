@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.*;
 
 public class ProcessQuery {
+    private String new_relation_name = "new_relation";
     private Parser parser;
     public String query;
     public MainMemory mem;
@@ -46,8 +47,41 @@ public class ProcessQuery {
     }
 
     //进度：仅仅实现单个table的select
-    private void op_select(){
-
+    private Relation op_select(){
+        Relation result_relation = null;
+        Schema result_schema;
+        Select select_array = parser.select;
+        if(schema_manager.relationExists("new_relation")){
+            schema_manager.deleteRelation("new_relation");
+        }
+        if(select_array.table_List.size() == 1 && select_array.where_clause_string == null){
+            result_schema = schema_manager.getSchema(select_array.table_List.get(0));//得到schema
+            result_relation = schema_manager.createRelation("new_relation",result_schema); //建立一个新的表
+            System.out.print("\nTry to do single select: \n");
+            Relation target_relation = schema_manager.getRelation(select_array.table_List.get(0));
+            int block_num = target_relation.getNumOfBlocks();
+            if(block_num == 0){
+                return result_relation;
+            }
+            int scan_times= (block_num - 1) / 9 + 1;
+            for(int i = 0; i < scan_times; i ++){
+                if((i+1) * 9 > block_num){
+                    schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, block_num - i * 9);
+                    result_relation.setBlocks( i * 9, 0, block_num - i * 9);
+                }else{
+                    schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, 9);
+                    result_relation.setBlocks(i*9, 0, 9);
+                } //从disk中读入选择relation的9个块，并设定为目标块的。
+            }
+            //判断如果是简单块
+            if(select_array.select_List.size() == 1 && select_array.select_List.get(0).equals("*")){
+                System.out.print("Now the result relation contains: " + "\n");
+                System.out.print(result_relation + "\n" + "\n");
+                System.out.print("\nJust a simple select, try to return.\n");
+                return result_relation;
+            }
+        }
+        return result_relation;
     }
 
     private void op_delete(){
@@ -71,9 +105,9 @@ public class ProcessQuery {
     private void op_insert(){
         System.out.print("\nStart to insert.\n");
         String relation_name = parser.table_List.get(0);
-        Relation target_reation = schema_manager.getRelation(relation_name);
-        Schema target_schema = target_reation.getSchema();
-        Tuple tuple = target_reation.createTuple();
+        Relation target_relation = schema_manager.getRelation(relation_name);
+        Schema target_schema = target_relation.getSchema();
+        Tuple tuple = target_relation.createTuple();
         if(parser.select.table_List.size() == 0){
             String temp_name;
             for(int traverse_count = 0; traverse_count < parser.value_List.size(); traverse_count++) {
@@ -84,17 +118,30 @@ public class ProcessQuery {
                     tuple.setField(temp_name, parser.value_List.get(traverse_count));
                 } else if (target_schema.getFieldType(temp_name) == FieldType.INT) {
                     System.out.print("Insert int.\n");
-                    System.out.print("The int is : "+ Integer.parseInt(parser.value_List.get(traverse_count)) + ".\n");
-                    tuple.setField(temp_name, Integer.parseInt(parser.value_List.get(traverse_count)));
+                    if(parser.value_List.get(traverse_count).equalsIgnoreCase("null")){
+                        tuple.setField(temp_name, -999999999);
+                    }else{
+                        tuple.setField(temp_name, Integer.parseInt(parser.value_List.get(traverse_count)));
+                        System.out.print("The int is : "+ Integer.parseInt(parser.value_List.get(traverse_count)) + ".\n");
+                    }
                 }
             }
+            appendTupleToRelation(target_relation, mem, 9,tuple);
+        }else if(parser.select.table_List.size() == 1){ //先解决如果只有一个single table的情况
+            Relation select_relation = op_select();
+            int block_nums = select_relation.getNumOfBlocks();
+            int index = target_relation.getNumOfBlocks();
+            for(int i = 0; i < block_nums; i++){
+                select_relation.getBlock(i , 9); //用第9个block进行
+                target_relation.setBlock(i + index, 9); //将mem中第9个传入。
+            }
+
         }
-        appendTupleToRelation(target_reation, mem, 2,tuple);
 
         System.out.print("Now the memory contains: " + "\n");
         System.out.print(mem + "\n");
         System.out.print("Now the relation contains: " + "\n");
-        System.out.print(target_reation + "\n" + "\n");
+        System.out.print(target_relation + "\n" + "\n");
     }
     private  void op_drop(){
         System.out.print("\nStart to drop.\n");
@@ -132,7 +179,7 @@ public class ProcessQuery {
 
         System.out.print("The schema has " + schema.getNumOfFields() + " fields" + "\n");
         System.out.print("The schema allows " + schema.getTuplesPerBlock() + " tuples per block" + "\n");
-        
+
         System.out.print("\nThe created table has name " + relation_reference.getRelationName() + "\n");
         System.out.print("The table has schema:" + "\n");
         System.out.print(relation_reference.getSchema() + "\n");
