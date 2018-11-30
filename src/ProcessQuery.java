@@ -148,8 +148,8 @@ public class ProcessQuery {
 
     private void op_delete(){
         System.out.print("\nStart to delete.\n");
+        String relation_name = parser.table_List.get(0);
         if(parser.delete.where_clause_string == null) { //实现不包含where的情况
-            String relation_name = parser.table_List.get(0);
             schema_manager.deleteRelation(relation_name);
 
             System.out.print("\nTable " + relation_name + " has been deleted.\n");
@@ -159,7 +159,88 @@ public class ProcessQuery {
             System.out.print(schema_manager + "\n");
             System.out.print("From the schema manager, the table " + relation_name + " exists: "
                     + (schema_manager.relationExists(relation_name) ? "TRUE" : "FALSE") + "\n");
+        }else{
+            Relation target_relation = schema_manager.getRelation(relation_name);
+            OperationTree op_tree = parser.delete.where_Clause;
+            
+            Tuple temp_tuple, last_tuple;
+            Block temp_block, last_block;
+            //依次取出delete的block进行处理
+
+            for(int i = 0; i < target_relation.getNumOfBlocks(); i++){
+                int block_num = target_relation.getNumOfBlocks();
+                target_relation.getBlock(i, 0); //找到要处理的block放入0中;
+                temp_block = mem.getBlock(0);
+
+                target_relation.getBlock(target_relation.getNumOfBlocks() - 1, 9);//找到最后一个block放入最后
+                last_block = mem.getBlock(9);
+                int last_num = target_relation.getNumOfBlocks() - 1;
+                for(int j = 0; j < temp_block.getNumTuples(); ){
+                    int tuple_num = temp_block.getNumTuples();
+                    temp_tuple = temp_block.getTuple(j);
+                    if(where_test(op_tree, temp_tuple)){ //如果满足条件
+                        if( i == (target_relation.getNumOfBlocks() - 1)){
+                            temp_tuple = temp_block.getTuple(temp_block.getNumTuples() - 1);
+                            temp_block.setTuple(j, temp_tuple);
+                            temp_block.invalidateTuple(temp_block.getNumTuples() - 1); //将最后一个tuple设置为不可用
+                            //如果是最后一个block填坑情况
+                        }else{
+                            //如果不是最后一个block的填坑情况。
+                            if(last_block.getNumTuples() == 0){
+                                target_relation.deleteBlocks(last_num); //删除最后一个block.
+                                target_relation.getBlock(target_relation.getNumOfBlocks() - 1, 9);//找到最后一个block放入最后
+                                last_block = mem.getBlock(9);
+                            } //更新block.
+                            temp_tuple = last_block.getTuple(last_block.getNumTuples() - 1); //赋值最后一个temp_tuple
+                            temp_block.setTuple(j, temp_tuple);
+                            last_block.invalidateTuple(last_block.getNumTuples() - 1); //将最后一个block的位置消除
+                        }
+                    }else{
+                        j++;
+                    }
+                }
+                target_relation.setBlock(i, 0);
+                if( i != (target_relation.getNumOfBlocks() - 1)){
+                    //如果不是对最后一个block进行删除操作，传回最后一个block，如果空，直接删除
+                    if(last_block.getNumTuples() != 0) {
+                        target_relation.setBlock(target_relation.getNumOfBlocks() - 1, 9);
+                    }else{
+                        target_relation.deleteBlocks(last_num); //删除最后一个block.
+                    }
+                }
+
+//                target_relation.setBlocks(i * 10 + index, 0, op_nums); //将mem中10个blocks传入。
+            }
+
         }
+    }
+
+    private boolean where_test(OperationTree op_tree, Tuple tuple){
+        boolean result = false;
+        if(op_tree == null){
+            result = true;
+        }
+        if(op_tree.op.equalsIgnoreCase("=")){
+            Schema schema = tuple.getSchema();
+
+            String left_string = op_tree.left_tree.op;
+            String right_string = op_tree.right_tree.op;
+            if(schema.fieldNameExists(left_string)){
+                left_string = tuple.getField(left_string).toString();
+                /*
+                if(schema.getFieldType(left_string) == FieldType.INT){
+                    left_string = tuple.getField(left_string).toString();
+                }else{
+                    left_string = tuple.getField(left_string).str;
+                }
+                */
+            }
+            if(schema.fieldNameExists(right_string)){
+                right_string = tuple.getField(left_string).toString();
+            }
+             result = left_string.equalsIgnoreCase(right_string);
+        }
+        return result;
     }
 
     //realize insert without select
