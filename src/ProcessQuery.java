@@ -90,12 +90,14 @@ public class ProcessQuery {
                 System.out.print(result_relation+ "\n" + "\n");
                 return result_relation;
 
-            }else{
+            }else {
                 ArrayList<String> field_names = new ArrayList<String>();
                 ArrayList<FieldType> field_types = new ArrayList<FieldType>();
+                String temp_name;
                 for(String field_name : select_array.select_List){
-                    field_names.add(field_name);
-                    field_types.add(target_schema.getFieldType(field_name));
+                    temp_name = field_name.substring(field_name.lastIndexOf('.') + 1);
+                    field_names.add(temp_name);
+                    field_types.add(target_schema.getFieldType(temp_name));
                 }
                 result_schema = new Schema(field_names, field_types);
                 result_relation = schema_manager.createRelation("new_relation", result_schema); //初始化result schema
@@ -122,7 +124,7 @@ public class ProcessQuery {
                             //依次对每个tuple进行操作
                             temp_tuple = temp_block.getTuple(k);
                             new_tuple = result_relation.createTuple();
-                            for(String field_name : select_array.select_List){
+                            for(String field_name : field_names){
                                 if(target_schema.getFieldType(field_name) == FieldType.STR20){
                                     new_tuple.setField(field_name, temp_tuple.getField(field_name).str);
                                 }else{
