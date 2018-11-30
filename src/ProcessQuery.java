@@ -29,7 +29,16 @@ public class ProcessQuery {
         System.out.print("Test Insert\n");
         parser.commandSplit(query);
         System.out.print("Keyword: " + parser.keyword+"\n");
-            System.out.print("TableList: " + parser.table_List+"\n");
+        System.out.print("TableList: " + parser.table_List+"\n");
+
+        if(schema_manager.relationExists("new_relation")){
+            schema_manager.deleteRelation("new_relation");
+        }
+
+        if(schema_manager.relationExists("temp_relation")){
+            schema_manager.deleteRelation("temp_relation");
+        }
+
         switch (parser.keyword.get(0)){
             case "create" : op_create();
                             break;
@@ -49,36 +58,87 @@ public class ProcessQuery {
     //进度：仅仅实现单个table的select
     private Relation op_select(){
         Relation result_relation = null;
-        Schema result_schema;
+        Schema result_schema, target_schema;
         Select select_array = parser.select;
-        if(schema_manager.relationExists("new_relation")){
-            schema_manager.deleteRelation("new_relation");
-        }
         if(select_array.table_List.size() == 1 && select_array.where_clause_string == null){
-            result_schema = schema_manager.getSchema(select_array.table_List.get(0));//得到schema
-            result_relation = schema_manager.createRelation("new_relation",result_schema); //建立一个新的表
             System.out.print("\nTry to do single select: \n");
             Relation target_relation = schema_manager.getRelation(select_array.table_List.get(0));
+            target_schema = target_relation.getSchema();
             int block_num = target_relation.getNumOfBlocks();
             if(block_num == 0){
                 return result_relation;
             }
             int scan_times= (block_num - 1) / 9 + 1;
-            for(int i = 0; i < scan_times; i ++){
-                if((i+1) * 9 > block_num){
-                    schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, block_num - i * 9);
-                    result_relation.setBlocks( i * 9, 0, block_num - i * 9);
-                }else{
-                    schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, 9);
-                    result_relation.setBlocks(i*9, 0, 9);
-                } //从disk中读入选择relation的9个块，并设定为目标块的。
-            }
+
             //判断如果是简单块
             if(select_array.select_List.size() == 1 && select_array.select_List.get(0).equals("*")){
+                result_schema = schema_manager.getSchema(select_array.table_List.get(0));//得到schema
+                result_relation = schema_manager.createRelation("new_relation",result_schema); //建立一个新的表
+
+                for(int i = 0; i < scan_times; i ++){
+                    if((i+1) * 9 > block_num){
+                        schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, block_num - i * 9);
+                        result_relation.setBlocks( i * 9, 0, block_num - i * 9);
+                    }else{
+                        schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, 9);
+                        result_relation.setBlocks(i*9, 0, 9);
+                    } //从disk中读入选择relation的9个块，并设定为目标块的。
+                }
+
+                //如果select只有*， 直接操作后返回result_relation
                 System.out.print("Now the result relation contains: " + "\n");
-                System.out.print(result_relation + "\n" + "\n");
-                System.out.print("\nJust a simple select, try to return.\n");
+                System.out.print(result_relation+ "\n" + "\n");
                 return result_relation;
+
+            }else{
+                ArrayList<String> field_names = new ArrayList<String>();
+                ArrayList<FieldType> field_types = new ArrayList<FieldType>();
+                for(String field_name : select_array.select_List){
+                    field_names.add(field_name);
+                    field_types.add(target_schema.getFieldType(field_name));
+                }
+                result_schema = new Schema(field_names, field_types);
+                result_relation = schema_manager.createRelation("new_relation", result_schema); //初始化result schema
+
+                Schema temp_schema = schema_manager.getSchema(select_array.table_List.get(0));
+                Relation temp_relation = schema_manager.createRelation("temp_relation",temp_schema); // 初始化temp schema
+                Tuple temp_tuple, new_tuple;
+                Block temp_block;
+                int op_block_num, block_tuple_num;
+                for(int i = 0; i < scan_times; i ++){
+                    if((i+1) * 9 > block_num){
+                        op_block_num = block_num - i * 9;
+                    }else {
+                        op_block_num = 9;
+                    }
+                    schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, op_block_num);
+                    temp_relation.setBlocks(i*9, 0, op_block_num);
+                    //从disk中读入选择relation的至多9个块，并设定为目标块的。
+                    for(int j = 0; j < op_block_num; j++){
+                        //依次对每个块进行操作
+                        temp_block = mem.getBlock(j);
+                        block_tuple_num = temp_block.getNumTuples();
+                        for(int k = 0; k < block_tuple_num; k++){
+                            //依次对每个tuple进行操作
+                            temp_tuple = temp_block.getTuple(k);
+                            new_tuple = result_relation.createTuple();
+                            for(String field_name : select_array.select_List){
+                                if(target_schema.getFieldType(field_name) == FieldType.STR20){
+                                    new_tuple.setField(field_name, temp_tuple.getField(field_name).str);
+                                }else{
+                                    new_tuple.setField(field_name, temp_tuple.getField(field_name).integer);
+                                }
+                            } //把每个元素存进新的new_tuple
+                            appendTupleToRelation(result_relation, mem, 9,new_tuple);
+                        }
+                    }
+
+                }
+                System.out.print("The table currently have " + result_relation.getNumOfTuples() + " tuples" + "\n");
+                System.out.print("Now the result relation contains: " + "\n");
+                System.out.print(result_relation+ "\n" + "\n");
+
+                return  result_relation;
             }
         }
         return result_relation;
@@ -101,7 +161,6 @@ public class ProcessQuery {
     }
 
     //realize insert without select
-    //Insert需要完成的： 1.集成select语句
     private void op_insert(){
         System.out.print("\nStart to insert.\n");
         String relation_name = parser.table_List.get(0);
@@ -131,11 +190,18 @@ public class ProcessQuery {
             Relation select_relation = op_select();
             int block_nums = select_relation.getNumOfBlocks();
             int index = target_relation.getNumOfBlocks();
-            for(int i = 0; i < block_nums; i++){
-                select_relation.getBlock(i , 9); //用第9个block进行
-                target_relation.setBlock(i + index, 9); //将mem中第9个传入。
-            }
+            int scan_times= (block_nums - 1) / 10 + 1;
+            int op_nums;
 
+            for(int i = 0; i < scan_times; i++){
+                if((i+1) * 10 > block_nums){
+                    op_nums = block_nums - i * 10;
+                }else {
+                    op_nums = 10;
+                }
+                select_relation.getBlocks(i * 10, 0, op_nums); //用10个block进行
+                target_relation.setBlocks(i * 10 + index, 0, op_nums); //将mem中10个blocks传入。
+            }
         }
 
         System.out.print("Now the memory contains: " + "\n");
@@ -202,27 +268,27 @@ public class ProcessQuery {
     Block block_reference;
         if (relation_reference.getNumOfBlocks()==0) {
             System.out.print("The relation is empty" + "\n");
-            System.out.print("Get the handle to the memory block " + memory_block_index + " and clear it" + "\n");
+ //           System.out.print("Get the handle to the memory block " + memory_block_index + " and clear it" + "\n");
             block_reference=mem.getBlock(memory_block_index);
             block_reference.clear(); //clear the block
             block_reference.appendTuple(tuple); // append the tuple
-            System.out.print("Write to the first block of the relation" + "\n");
+//            System.out.print("Write to the first block of the relation" + "\n");
             relation_reference.setBlock(relation_reference.getNumOfBlocks(),memory_block_index);
         } else {
-            System.out.print("Read the last block of the relation into memory block 5:" + "\n");
+//            System.out.print("Read the last block of the relation into memory block 5:" + "\n");
             relation_reference.getBlock(relation_reference.getNumOfBlocks()-1,memory_block_index);
             block_reference=mem.getBlock(memory_block_index);
 
             if (block_reference.isFull()) {
-                System.out.print("(The block is full: Clear the memory block and append the tuple)" + "\n");
+//                System.out.print("(The block is full: Clear the memory block and append the tuple)" + "\n");
                 block_reference.clear(); //clear the block
                 block_reference.appendTuple(tuple); // append the tuple
-                System.out.print("Write to a new block at the end of the relation" + "\n");
+//                System.out.print("Write to a new block at the end of the relation" + "\n");
                 relation_reference.setBlock(relation_reference.getNumOfBlocks(),memory_block_index); //write back to the relation
             } else {
-                System.out.print("(The block is not full: Append it directly)" + "\n");
+ //               System.out.print("(The block is not full: Append it directly)" + "\n");
                 block_reference.appendTuple(tuple); // append the tuple
-                System.out.print("Write to the last block of the relation" + "\n");
+  //              System.out.print("Write to the last block of the relation" + "\n");
                 relation_reference.setBlock(relation_reference.getNumOfBlocks()-1,memory_block_index); //write back to the relation
             }
         }
