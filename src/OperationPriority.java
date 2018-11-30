@@ -36,6 +36,7 @@ public class OperationPriority {
                             String op = operator.pop();
                             obejct.push(new OperationTree(left_tree, right_tree, op));
                      }
+                     operator.push(strings[i]);
                      break;
                  case "(":
                  case "[":

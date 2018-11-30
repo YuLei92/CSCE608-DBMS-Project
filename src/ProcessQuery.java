@@ -205,13 +205,15 @@ public class ProcessQuery {
                     if(last_block.getNumTuples() != 0) {
                         target_relation.setBlock(target_relation.getNumOfBlocks() - 1, 9);
                     }else{
-                        target_relation.deleteBlocks(last_num); //删除最后一个block.
+                        target_relation.deleteBlocks(target_relation.getNumOfBlocks() - 1); //删除最后一个block.
                     }
                 }
 
 //                target_relation.setBlocks(i * 10 + index, 0, op_nums); //将mem中10个blocks传入。
             }
-
+            System.out.print("The table currently have " + target_relation.getNumOfTuples() + " tuples" + "\n");
+            System.out.print("Now the result relation contains: " + "\n");
+            System.out.print(target_relation+ "\n" + "\n");
         }
     }
 

@@ -34,7 +34,7 @@ public class Executor {
         System.out.println(parser.delete.where_clause_string );
 
         System.out.println("\n"+"delete.where op: " );
-        System.out.println(parser.delete.where_Clause.op);
+        System.out.println(parser.delete.where_Clause);
 
         System.out.println("\n"+"select" );
 
