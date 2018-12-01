@@ -60,7 +60,9 @@ public class ProcessQuery {
         Relation result_relation = null;
         Schema result_schema, target_schema;
         Select select_array = parser.select;
-        if(select_array.table_List.size() == 1 && select_array.where_clause_string == null){
+        int op_block_num;
+        Block temp_block;
+        if(select_array.table_List.size() == 1){
             System.out.print("\nTry to do single select: \n");
             Relation target_relation = schema_manager.getRelation(select_array.table_List.get(0));
             target_schema = target_relation.getSchema();
@@ -69,7 +71,6 @@ public class ProcessQuery {
                 return result_relation;
             }
             int scan_times= (block_num - 1) / 9 + 1;
-
             //判断如果是简单块
             if(select_array.select_List.size() == 1 && select_array.select_List.get(0).equals("*")){
                 result_schema = schema_manager.getSchema(select_array.table_List.get(0));//得到schema
@@ -77,12 +78,27 @@ public class ProcessQuery {
 
                 for(int i = 0; i < scan_times; i ++){
                     if((i+1) * 9 > block_num){
-                        schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, block_num - i * 9);
-                        result_relation.setBlocks( i * 9, 0, block_num - i * 9);
+                        op_block_num = block_num - i * 9;
+                        schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, op_block_num);
                     }else{
-                        schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, 9);
-                        result_relation.setBlocks(i*9, 0, 9);
+                        op_block_num = 9;
+                        schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, op_block_num);
                     } //从disk中读入选择relation的9个块，并设定为目标块的。
+
+                    if(select_array.where_clause_string == null){
+                        result_relation.setBlocks( i * 9, 0, op_block_num);
+                    }else{
+                        for(int j = 0; j < op_block_num; j++){
+                            temp_block = mem.getBlock(j); //对每个块进行操作
+                            int tuple_count = temp_block.getNumTuples();
+                            for(int k = 0; k < tuple_count; k++){
+                                Tuple temp_tuple = temp_block.getTuple(k);
+                                if(where_test(select_array.where_Clause ,temp_tuple ,target_relation)){
+                                    appendTupleToRelation(result_relation, mem, 9,temp_tuple);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 //如果select只有*， 直接操作后返回result_relation
@@ -105,8 +121,7 @@ public class ProcessQuery {
                 Schema temp_schema = schema_manager.getSchema(select_array.table_List.get(0));
                 Relation temp_relation = schema_manager.createRelation("temp_relation",temp_schema); // 初始化temp schema
                 Tuple temp_tuple, new_tuple;
-                Block temp_block;
-                int op_block_num, block_tuple_num;
+                int block_tuple_num;
                 for(int i = 0; i < scan_times; i ++){
                     if((i+1) * 9 > block_num){
                         op_block_num = block_num - i * 9;
@@ -291,7 +306,7 @@ public class ProcessQuery {
                 return Integer.toString(temp);
 
             case "/" :
-                temp = Integer.parseInt(where_dfs(op_tree.left_tree, tuple, r1)) *
+                temp = Integer.parseInt(where_dfs(op_tree.left_tree, tuple, r1)) /
                         Integer.parseInt(where_dfs(op_tree.right_tree, tuple, r1));
                 return Integer.toString(temp);
 
@@ -325,7 +340,7 @@ public class ProcessQuery {
                 } else if (target_schema.getFieldType(temp_name) == FieldType.INT) {
                     System.out.print("Insert int.\n");
                     if(parser.value_List.get(traverse_count).equalsIgnoreCase("null")){
-                        tuple.setField(temp_name, -999999999);
+                        tuple.setField(temp_name, -1);
                     }else{
                         tuple.setField(temp_name, Integer.parseInt(parser.value_List.get(traverse_count)));
                         System.out.print("The int is : "+ Integer.parseInt(parser.value_List.get(traverse_count)) + ".\n");
