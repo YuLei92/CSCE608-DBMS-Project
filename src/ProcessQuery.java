@@ -6,9 +6,18 @@ import storageManager.*;
 import java.util.*;
 import java.util.*;
 
+//use new_relation, temp_relation, result relation as the temp relation for operation
+
 public class ProcessQuery {
     private String new_relation_name = "new_relation";
+    private String r_name_1 = "relation_1";
+    private String r_name_2 = "relation_2";
+    private String r_result = "result_relation";
+
     private Parser parser;
+    private ArrayList<String> attr_belong = new ArrayList<String>();
+    private ArrayList<String> origin_name = new ArrayList<String>();
+
     public String query;
     public MainMemory mem;
     public Disk disk;
@@ -39,6 +48,18 @@ public class ProcessQuery {
             schema_manager.deleteRelation("temp_relation");
         }
 
+        if(schema_manager.relationExists("relation_1")){
+            schema_manager.deleteRelation("relation_1");
+        }
+
+        if(schema_manager.relationExists("relation_1")){
+            schema_manager.deleteRelation("relation_2");
+        }
+
+        if(schema_manager.relationExists("result_relation")){
+            schema_manager.deleteRelation("result_relation");
+        }
+
         switch (parser.keyword.get(0)){
             case "create" : op_create();
                             break;
@@ -55,6 +76,143 @@ public class ProcessQuery {
         }
     }
 
+    private  Relation find_largest_relation(ArrayList<Relation> relations){
+        int block_least_num = -1;
+        Relation result = null;
+        for(Relation temp_relation : relations){
+            if(temp_relation.getNumOfBlocks() > block_least_num){
+                result = temp_relation;
+            }
+        }
+        return result;
+    }
+
+    private void op_cross_join(Relation r_1, Relation r_2, Relation result_Relation, OperationTree op_tree){
+        int pos_1, pos_2;
+        pos_1 = 0;
+        pos_2 = r_1.getNumOfBlocks();
+        r_1.getBlocks(0, pos_1, r_1.getNumOfBlocks());
+        r_2.getBlocks(0, pos_2, r_2.getNumOfBlocks());
+        Block temp_block_1, temp_block_2;
+        for(int i = 0; i < r_1.getNumOfBlocks(); i ++){
+            temp_block_1 = mem.getBlock(i);
+            for(int j = 0; j < r_2.getNumOfBlocks(); j++){
+                temp_block_2 = mem.getBlock(pos_2 + j);
+                //temp_block_1和temp_block_2分别存储两个的待处理块
+                for(Tuple tuple_1 : temp_block_1.getTuples()){
+                    for(Tuple tuple_2 : temp_block_2.getTuples()){
+                        Tuple new_tuple = result_Relation.createTuple();
+                        for(int tuple_offset = 0; tuple_offset < tuple_1.getNumOfFields(); tuple_offset++){
+                            if(tuple_1.getSchema().getFieldType(tuple_offset) == FieldType.INT){
+                                int value = tuple_1.getField(tuple_offset).integer;
+                                new_tuple.setField(tuple_offset, value);
+                            }else{
+                                String value = tuple_1.getField(tuple_offset).str;
+                                new_tuple.setField(tuple_offset, value);
+                            }
+                        }
+
+                        for(int tuple_offset = 0; tuple_offset < tuple_2.getNumOfFields(); tuple_offset++){
+                            if(tuple_2.getSchema().getFieldType(tuple_offset) == FieldType.INT){
+                                int value = tuple_2.getField(tuple_offset).integer;
+                                new_tuple.setField(tuple_offset + tuple_1.getNumOfFields(), value);
+                            }else{
+                                String value = tuple_2.getField(tuple_offset).str;
+                                new_tuple.setField(tuple_offset + tuple_1.getNumOfFields(), value);
+                            }
+                        }
+                        if(op_tree == null) { //如果没有where条件
+                            appendTupleToRelation(result_Relation, mem, 9, new_tuple); //用第10个内存块进行操作
+                        }else{
+                            if(where_test(op_tree, new_tuple, result_Relation)){
+                                appendTupleToRelation(result_Relation, mem, 9, new_tuple);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private Relation crossjoin(ArrayList<Relation> relations, OperationTree op_tree){
+        //use the 10th block in the memory to do the insert.
+        if(relations.size() == 0 || relations.size() == 1){
+            return null;
+        }
+        Schema schema_1, schema_2;
+        String name_new, name_old;
+        Relation relation_1, relation_2;
+        if(relations.size() <= 2){
+            origin_name.clear();
+        }
+        boolean isBottom = false;
+        if(relations.size() == 2 ){
+            name_new = r_name_1;
+            name_old = null;
+            relation_1 = relations.get(0);
+            relation_2 = relations.get(1);
+            schema_1 = relation_1.getSchema();
+            schema_2 = relation_2.getSchema();
+            isBottom = true;
+        }else{
+            // r1存递归结果, r2存更大的relation
+            relation_2 = find_largest_relation(relations);
+            schema_2 = relation_2.getSchema();
+            relations.remove(relation_2);
+            relation_1 = crossjoin(relations, op_tree);
+            schema_1 = relation_1.getSchema();
+            if(relation_1.getRelationName().equalsIgnoreCase(r_name_2)){
+                name_new = r_name_1;
+                name_old = r_name_2;
+            }else{
+                name_new = r_name_2;
+                name_old = r_name_1;
+            }
+        }
+
+        ArrayList<String> field_names = new ArrayList<String>();
+        ArrayList<FieldType> field_types = new ArrayList<FieldType>();
+
+        for(String new_name : schema_1.getFieldNames()){
+            field_names.add(new_name);
+            field_types.add(schema_1.getFieldType(new_name));
+
+            if(isBottom) {
+                origin_name.add(new_name); //加入原本的名字
+            }
+        }
+
+        // r_2是一个新表
+        for(String new_name : schema_2.getFieldNames()){
+            if(origin_name.contains(new_name)){ //如果和加前缀前的名字有重复的
+                if(isBottom){
+                    int old_pos = origin_name.indexOf(new_name);
+                    field_names.set(old_pos, relation_1.getRelationName() + "." + new_name);
+                }
+                field_names.add(relation_2.getRelationName() + "." + new_name);
+            }else {
+                field_names.add(new_name);
+            }
+            field_types.add(schema_2.getFieldType(new_name));
+            origin_name.add(relation_2.getRelationName());
+        }
+
+
+
+        Schema schema_new = new Schema(field_names, field_types);
+        Relation result_relation = schema_manager.createRelation(name_new, schema_new);
+
+        op_cross_join(relation_1, relation_2, result_relation, op_tree);
+
+        if(!isBottom){
+            schema_manager.deleteRelation(name_old);
+        }
+
+        return  result_relation;
+    }
+
+
+
     //进度：仅仅实现单个table的select
     private Relation op_select(){
         Relation result_relation = null;
@@ -62,7 +220,8 @@ public class ProcessQuery {
         Select select_array = parser.select;
         int op_block_num;
         Block temp_block;
-        if(select_array.table_List.size() == 1){
+
+        if(select_array.table_List.size() <= 1){
             System.out.print("\nTry to do single select: \n");
             Relation target_relation = schema_manager.getRelation(select_array.table_List.get(0));
             target_schema = target_relation.getSchema();
@@ -104,9 +263,9 @@ public class ProcessQuery {
                 //如果select只有*， 直接操作后返回result_relation
                 System.out.print("Now the result relation contains: " + "\n");
                 System.out.print(result_relation+ "\n" + "\n");
-                return result_relation;
+//                return result_relation;
 
-            }else {
+            }else {  //如果不是单纯的 *
                 ArrayList<String> field_names = new ArrayList<String>();
                 ArrayList<FieldType> field_types = new ArrayList<FieldType>();
                 String temp_name;
@@ -118,10 +277,11 @@ public class ProcessQuery {
                 result_schema = new Schema(field_names, field_types);
                 result_relation = schema_manager.createRelation("new_relation", result_schema); //初始化result schema
 
-                Schema temp_schema = schema_manager.getSchema(select_array.table_List.get(0));
-                Relation temp_relation = schema_manager.createRelation("temp_relation",temp_schema); // 初始化temp schema
+//                Schema temp_schema = schema_manager.getSchema(select_array.table_List.get(0));
+//                Relation temp_relation = schema_manager.createRelation("temp_relation",temp_schema); // 初始化temp schema
                 Tuple temp_tuple, new_tuple;
                 int block_tuple_num;
+
                 for(int i = 0; i < scan_times; i ++){
                     if((i+1) * 9 > block_num){
                         op_block_num = block_num - i * 9;
@@ -129,7 +289,7 @@ public class ProcessQuery {
                         op_block_num = 9;
                     }
                     schema_manager.getRelation(select_array.table_List.get(0)).getBlocks(i * 9, 0, op_block_num);
-                    temp_relation.setBlocks(i*9, 0, op_block_num);
+//                    temp_relation.setBlocks(i*9, 0, op_block_num);
                     //从disk中读入选择relation的至多9个块，并设定为目标块的。
                     for(int j = 0; j < op_block_num; j++){
                         //依次对每个块进行操作
@@ -155,9 +315,77 @@ public class ProcessQuery {
                 System.out.print("Now the result relation contains: " + "\n");
                 System.out.print(result_relation+ "\n" + "\n");
 
-                return  result_relation;
+//                return  result_relation;
+            }
+        }else{
+            ArrayList<Relation> relations = new ArrayList<Relation>();
+            for(String temp_r : select_array.table_List){
+                relations.add(schema_manager.getRelation(temp_r));
+            } //得到新的list包含所有的关系
+
+            Relation temp_relation;
+
+            if(select_array.where_clause_string == null) {
+                //如果没有where
+                temp_relation = crossjoin(relations,null);
+            }else{
+                temp_relation = crossjoin(relations, select_array.where_Clause);
+            }
+
+            if(select_array.select_List.size() == 1 && select_array.select_List.get(0).equals("*")){
+                //如果多个表但是只有"*"
+                result_relation = temp_relation;
+            }else{
+                ArrayList<String> field_names = new ArrayList<String>();
+                ArrayList<FieldType> field_types = new ArrayList<FieldType>();
+                for(String field_name : select_array.select_List){
+                    field_names.add(field_name);
+                    field_types.add(temp_relation.getSchema().getFieldType(field_name));
+                }
+                result_schema = new Schema(field_names, field_types);
+                result_relation = schema_manager.createRelation(r_result, result_schema); //初始化result schema
+
+                Tuple temp_tuple, new_tuple;
+                int block_num = temp_relation.getNumOfBlocks();
+                int scan_times= (block_num - 1) / 9 + 1;
+                int block_tuple_num;
+
+                for(int i = 0; i < scan_times; i ++){
+                    if((i+1) * 9 > block_num){
+                        op_block_num = block_num - i * 9;
+                    }else {
+                        op_block_num = 9;
+                    }
+                    schema_manager.getRelation(temp_relation.getRelationName()).getBlocks(i * 9, 0, op_block_num);
+ //                   temp_relation.setBlocks(i*9, 0, op_block_num);
+                    //从disk中读入选择relation的至多9个块，并设定为目标块的。
+                    for(int j = 0; j < op_block_num; j++){
+                        //依次对每个块进行操作
+                        temp_block = mem.getBlock(j); //依次对每个block进行操作
+                        block_tuple_num = temp_block.getNumTuples();
+                        for(int k = 0; k < block_tuple_num; k++){
+                            //依次对每个tuple进行操作
+                            temp_tuple = temp_block.getTuple(k);
+                            new_tuple = result_relation.createTuple();
+                            for(String field_name : field_names){
+                                if(result_schema.getFieldType(field_name) == FieldType.STR20){
+                                    new_tuple.setField(field_name, temp_tuple.getField(field_name).str);
+                                }else{
+                                    new_tuple.setField(field_name, temp_tuple.getField(field_name).integer);
+                                }
+                            } //把每个元素存进新的new_tuple
+                            appendTupleToRelation(result_relation, mem, 9,new_tuple);
+                        }
+                    }
+
+                }
             }
         }
+
+        System.out.print("The table currently have " + result_relation.getNumOfTuples() + " tuples" + "\n");
+        System.out.print("Now the result relation contains: " + "\n");
+        System.out.print(result_relation+ "\n" + "\n");
+
         return result_relation;
     }
 
@@ -240,13 +468,15 @@ public class ProcessQuery {
         if(op_tree.left_tree == null && op_tree.right_tree == null){
             Schema schema = tuple.getSchema();
             String temp_name;
-            if(op_tree.op.contains(".") &&
-                    op_tree.op.substring(0, op_tree.op.lastIndexOf('.' + 1)).equalsIgnoreCase(r1.getRelationName())){
-                temp_name =  op_tree.op.substring(op_tree.op.lastIndexOf('.') + 1);
+            temp_name = op_tree.op;
+            if(op_tree.op.contains(".")){
+                int pos = op_tree.op.lastIndexOf('.') + 1;
+                int length = op_tree.op.length();
+                if(op_tree.op.substring(0, op_tree.op.lastIndexOf('.') + 1).equalsIgnoreCase(r1.getRelationName())){
+                    temp_name =  op_tree.op.substring(op_tree.op.lastIndexOf('.') + 1);
+                }
             }
-            else{
-                temp_name =  op_tree.op;
-            }
+
             if(schema.fieldNameExists(temp_name)){
                 return tuple.getField(temp_name).toString();
             }else{
