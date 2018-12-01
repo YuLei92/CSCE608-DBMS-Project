@@ -178,7 +178,7 @@ public class ProcessQuery {
                 for(int j = 0; j < temp_block.getNumTuples(); ){
                     int tuple_num = temp_block.getNumTuples();
                     temp_tuple = temp_block.getTuple(j);
-                    if(where_test(op_tree, temp_tuple)){ //如果满足条件
+                    if(where_test(op_tree, temp_tuple, target_relation)){ //如果满足条件
                         if( i == (target_relation.getNumOfBlocks() - 1)){
                             temp_tuple = temp_block.getTuple(temp_block.getNumTuples() - 1);
                             temp_block.setTuple(j, temp_tuple);
@@ -217,32 +217,94 @@ public class ProcessQuery {
         }
     }
 
-    private boolean where_test(OperationTree op_tree, Tuple tuple){
-        boolean result = false;
-        if(op_tree == null){
-            result = true;
-        }
-        if(op_tree.op.equalsIgnoreCase("=")){
-            Schema schema = tuple.getSchema();
 
-            String left_string = op_tree.left_tree.op;
-            String right_string = op_tree.right_tree.op;
-            if(schema.fieldNameExists(left_string)){
-                left_string = tuple.getField(left_string).toString();
-                /*
-                if(schema.getFieldType(left_string) == FieldType.INT){
-                    left_string = tuple.getField(left_string).toString();
-                }else{
-                    left_string = tuple.getField(left_string).str;
-                }
-                */
-            }
-            if(schema.fieldNameExists(right_string)){
-                right_string = tuple.getField(left_string).toString();
-            }
-             result = left_string.equalsIgnoreCase(right_string);
+    private String where_dfs(OperationTree op_tree, Tuple tuple, Relation r1){
+        if(op_tree.op == null){
+            return null;
         }
-        return result;
+        if(op_tree.left_tree == null && op_tree.right_tree == null){
+            Schema schema = tuple.getSchema();
+            String temp_name;
+            if(op_tree.op.contains(".") &&
+                    op_tree.op.substring(0, op_tree.op.lastIndexOf('.' + 1)).equalsIgnoreCase(r1.getRelationName())){
+                temp_name =  op_tree.op.substring(op_tree.op.lastIndexOf('.') + 1);
+            }
+            else{
+                temp_name =  op_tree.op;
+            }
+            if(schema.fieldNameExists(temp_name)){
+                return tuple.getField(temp_name).toString();
+            }else{
+                return temp_name;
+            }
+        }
+        int temp;
+        switch (op_tree.op){
+            case "=" :
+                if(where_dfs(op_tree.left_tree, tuple, r1).equalsIgnoreCase(where_dfs(op_tree.right_tree, tuple, r1))){
+                    return "true";
+                }else{
+                    return "false";
+                }
+            case "&&" :
+                if(where_dfs(op_tree.left_tree, tuple, r1).equalsIgnoreCase("true") &&
+                        where_dfs(op_tree.right_tree, tuple, r1).equalsIgnoreCase("true")){
+                    return "true";
+                }else{
+                    return "false";
+                }
+            case "||" :
+                if(where_dfs(op_tree.left_tree, tuple, r1).equalsIgnoreCase("true") ||
+                        where_dfs(op_tree.right_tree, tuple, r1).equalsIgnoreCase("true")){
+                    return "true";
+                }else{
+                    return "false";
+                }
+            case ">" :
+                if(Integer.parseInt(where_dfs(op_tree.left_tree, tuple, r1)) >
+                        Integer.parseInt(where_dfs(op_tree.right_tree, tuple, r1))){
+                    return "true";
+                }else{
+                    return "false";
+                }
+            case "<" :
+                if(Integer.parseInt(where_dfs(op_tree.left_tree, tuple, r1)) <
+                    Integer.parseInt(where_dfs(op_tree.right_tree, tuple, r1))){
+                return "true";
+                }else{
+                    return "false";
+                }
+
+            case "+" :
+                temp = Integer.parseInt(where_dfs(op_tree.left_tree, tuple, r1)) +
+                        Integer.parseInt(where_dfs(op_tree.right_tree, tuple, r1));
+                return Integer.toString(temp);
+
+            case "-" :
+                temp = Integer.parseInt(where_dfs(op_tree.left_tree, tuple, r1)) -
+                        Integer.parseInt(where_dfs(op_tree.right_tree, tuple, r1));
+                return Integer.toString(temp);
+
+            case "*" :
+                temp = Integer.parseInt(where_dfs(op_tree.left_tree, tuple, r1)) *
+                        Integer.parseInt(where_dfs(op_tree.right_tree, tuple, r1));
+                return Integer.toString(temp);
+
+            case "/" :
+                temp = Integer.parseInt(where_dfs(op_tree.left_tree, tuple, r1)) *
+                        Integer.parseInt(where_dfs(op_tree.right_tree, tuple, r1));
+                return Integer.toString(temp);
+
+            default: System.out.println("Nothing to do.\n\n");
+        }
+        return null;
+    }
+
+    //需要进行修改，现在只是简单判断结果
+    private boolean where_test(OperationTree op_tree, Tuple tuple, Relation r1) {
+        String result = where_dfs(op_tree, tuple, r1);
+        boolean result_temp = result.equalsIgnoreCase("true");
+        return result.equalsIgnoreCase("true");
     }
 
     //realize insert without select
