@@ -198,13 +198,6 @@ public class ProcessQuery {
             r2_new.setBlocks(i * 10, 0, op_block_num);//存入r2_new
         }
 
-        
-        ArrayList<Integer> r1_block_column_index = new ArrayList<Integer>();
-        List<String> attrs = new LinkedList<String>();
-        attrs.add("exam");
-        heapHelper helper = new heapHelper(10, attrs);
-
-
         int num_r1 = r1.getNumOfBlocks();
         int num_r2 = r2.getNumOfBlocks();
         int num_r1_new = r1_new.getNumOfBlocks();
@@ -221,6 +214,37 @@ public class ProcessQuery {
 
         System.out.print("Now the result relation r2_new contains: " + "\n");
         System.out.print(r2_new+ "\n" + "\n");
+
+        ArrayList<Integer> r1_block_column_index = new ArrayList<Integer>();
+        List<String> attrs = new LinkedList<String>();
+        int r1_max = (r1_new.getNumOfBlocks() - 1 )/10 + 1;
+        int r2_max = (r2_new.getNumOfBlocks() - 1 )/10 + 1;
+        attrs.add(attr);
+        heapHelper helper = new heapHelper(r1_max + r2_max, attrs);
+        int r1_sublist_index = 0, r2_sublist_index =0;
+        while(r1_sublist_index < r1_max){
+            r1_new.getBlock(r1_sublist_index * 10, r1_sublist_index);
+            r1_sublist_index ++;
+            Tuple_node new_node = new Tuple_node(mem.getBlock(r1_sublist_index).getTuple(0), r1_sublist_index,
+                    0, 0, r1_sublist_index);
+            helper.insert(new_node);
+        }
+
+        while(r2_sublist_index < r2_max){
+            r2_new.getBlock(r2_sublist_index * 10, r2_sublist_index + r1_max);
+            r2_sublist_index ++;
+            Tuple_node new_node = new Tuple_node(mem.getBlock(r2_sublist_index + r1_max).getTuple(0),
+                    r2_sublist_index, 0, 0, r2_sublist_index + r1_max);
+            //把r2的第一block的第一个tuple插入heap
+            helper.insert(new_node);
+        }
+
+        Tuple_node new_tuple_node = helper.pop();
+        System.out.println("The pop node's exam is: " + new_tuple_node.tuple.getField(attr).integer);
+        new_tuple_node = helper.pop();
+        System.out.println("The pop node's exam is: " + new_tuple_node.tuple.getField(attr).integer);
+        System.out.println("Test end.");
+
 
     }
 
