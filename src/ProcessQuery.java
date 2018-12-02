@@ -198,6 +198,13 @@ public class ProcessQuery {
             r2_new.setBlocks(i * 10, 0, op_block_num);//存入r2_new
         }
 
+        
+        ArrayList<Integer> r1_block_column_index = new ArrayList<Integer>();
+        List<String> attrs = new LinkedList<String>();
+        attrs.add("exam");
+        heapHelper helper = new heapHelper(10, attrs);
+
+
         int num_r1 = r1.getNumOfBlocks();
         int num_r2 = r2.getNumOfBlocks();
         int num_r1_new = r1_new.getNumOfBlocks();
@@ -214,7 +221,7 @@ public class ProcessQuery {
 
         System.out.print("Now the result relation r2_new contains: " + "\n");
         System.out.print(r2_new+ "\n" + "\n");
-        
+
     }
 
 
