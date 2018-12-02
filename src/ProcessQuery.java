@@ -76,6 +76,162 @@ public class ProcessQuery {
         }
     }
 
+    private void natural_join(Relation r1, Relation r2, Relation result_r, String attr){
+        FieldType attr_type = r1.getSchema().getFieldType(attr);
+        String r1_temp_name = r_name_1;
+        String r2_temp_name = r_name_2;
+        //先依次对r1, r2进行sort，然后存回。
+        Schema r1_schema = r1.getSchema();
+        Schema r2_schema = r2.getSchema();
+        Relation r1_new = schema_manager.createRelation(r_name_1, r1_schema);
+        Relation r2_new = schema_manager.createRelation(r_name_2, r2_schema);
+        int r1_block_num = r1.getNumOfBlocks();
+        int r2_block_num = r2.getNumOfBlocks();
+        int scan_times = (r1_block_num - 1) / 10 + 1; //计算需要进行多少次scan
+        int op_block_num; //存储每次对多少个block进行操作
+        for(int i = 0; i < scan_times; i++) {
+            if ((i + 1) * 10 > r1_block_num) {
+                op_block_num = r1_block_num - i * 10;
+            } else {
+                op_block_num = 10;
+            }//计算每次block操作个数
+            r1.getBlocks(i * 10, 0, op_block_num);//接下来对这个进行排序
+            int prev_tuple_num = 0;
+            Block curr_block, prev_block;
+            Tuple curr_tuple, prev_tuple;
+            prev_block = mem.getBlock(0);
+            prev_tuple = prev_block.getTuple(0);
+            for (int end_block_num = op_block_num - 1; end_block_num >= 0; end_block_num--) {
+                for (int end_tuple_num = mem.getBlock(end_block_num).getNumTuples() - 1; end_tuple_num >= 0; end_tuple_num--) {
+                    for (int curr_block_num = 0; curr_block_num <= end_block_num; curr_block_num++) {
+                        curr_block = mem.getBlock(curr_block_num);
+                        for (int curr_tuple_num = 0; curr_tuple_num <= end_tuple_num; curr_tuple_num++) {
+                            curr_tuple = curr_block.getTuple(curr_tuple_num);
+                            if (curr_block_num == 0 && curr_tuple_num == 0) {
+                                prev_block = mem.getBlock(0);
+                                prev_tuple = prev_block.getTuple(0);
+                                continue;
+                            }
+
+                            int comp_r;
+                            if(attr_type == FieldType.INT){
+                                comp_r = prev_tuple.getField(attr).integer - curr_tuple.getField(attr).integer;
+                            }else{
+                                comp_r = prev_tuple.getField(attr).toString().compareTo(curr_tuple.getField(attr).toString());
+                            }
+
+                            if (comp_r >= 0) {
+                                Tuple temp_tuple = prev_tuple;
+                                prev_block.setTuple(prev_tuple_num, curr_tuple);
+                                curr_block.setTuple(curr_tuple_num, temp_tuple);
+                                curr_tuple = prev_tuple;
+                            }
+/*
+                            System.out.print("After compare, the first tuple: " + "\n");
+                            System.out.print(prev_block.getTuple(prev_tuple_num).getField(attr).toString() + "\n");
+                            System.out.print("After compare, the second tuple: " + "\n");
+                            System.out.print(curr_block.getTuple(curr_tuple_num).getField(attr).toString() + "\n");
+                            System.out.print("\n");
+*/
+                            prev_tuple = curr_tuple;
+//                            prev_block_num = curr_block_num;
+                            prev_tuple_num = curr_tuple_num;
+
+                        }
+                        prev_block = curr_block;
+/*
+                        System.out.print("Now the result: " + "\n");
+                        System.out.print(mem.getBlock(end_block_num).getTuple(end_tuple_num).getField(attr).toString() + "\n");
+                        System.out.print("\n");
+                        */
+                    }
+                }
+            }//对r1冒泡排序
+            r1_new.setBlocks(i * 10, 0, op_block_num);//存入r1_new
+        }
+
+        scan_times = (r2_block_num - 1) / 10 + 1; //计算需要进行多少次scan
+        for(int i = 0; i < scan_times; i++) {
+            if ((i + 1) * 10 > r2_block_num) {
+                op_block_num = r2_block_num - i * 10;
+            } else {
+                op_block_num = 10;
+            }//计算每次block操作个数
+            r2.getBlocks(i * 10, 0, op_block_num);//接下来对这个进行排序
+            int prev_tuple_num = 0;
+            Block curr_block, prev_block;
+            Tuple curr_tuple, prev_tuple;
+            prev_block = mem.getBlock(0);
+            prev_tuple = prev_block.getTuple(0);
+            for (int end_block_num = op_block_num - 1; end_block_num >= 0; end_block_num--) {
+                for (int end_tuple_num = mem.getBlock(end_block_num).getNumTuples() - 1; end_tuple_num >= 0; end_tuple_num--) {
+                    for (int curr_block_num = 0; curr_block_num <= end_block_num; curr_block_num++) {
+                        curr_block = mem.getBlock(curr_block_num);
+                        for (int curr_tuple_num = 0; curr_tuple_num <= end_tuple_num; curr_tuple_num++) {
+                            curr_tuple = curr_block.getTuple(curr_tuple_num);
+                            if (curr_block_num == 0 && curr_tuple_num == 0) {
+                                prev_block = mem.getBlock(0);
+                                prev_tuple = prev_block.getTuple(0);
+                                continue;
+                            }
+
+                            int comp_r;
+                            if(attr_type == FieldType.INT){
+                                comp_r = prev_tuple.getField(attr).integer - curr_tuple.getField(attr).integer;
+                            }else{
+                                comp_r = prev_tuple.getField(attr).toString().compareTo(curr_tuple.getField(attr).toString());
+                            }
+
+                            if (comp_r >= 0) {
+                                Tuple temp_tuple = prev_tuple;
+                                prev_block.setTuple(prev_tuple_num, curr_tuple);
+                                curr_block.setTuple(curr_tuple_num, temp_tuple);
+                                curr_tuple = prev_tuple;
+                            }
+/*
+                            System.out.print("After compare, the first tuple: " + "\n");
+                            System.out.print(prev_block.getTuple(prev_tuple_num).getField(attr).toString() + "\n");
+                            System.out.print("After compare, the second tuple: " + "\n");
+                            System.out.print(curr_block.getTuple(curr_tuple_num).getField(attr).toString() + "\n");
+                            System.out.print("\n");
+*/
+                            prev_tuple = curr_tuple;
+//                            prev_block_num = curr_block_num;
+                            prev_tuple_num = curr_tuple_num;
+
+                        }
+                        prev_block = curr_block;
+/*
+                        System.out.print("Now the result: " + "\n");
+                        System.out.print(mem.getBlock(end_block_num).getTuple(end_tuple_num).getField(attr).toString() + "\n");
+                        System.out.print("\n");
+                        */
+                    }
+                }
+            }//对r2冒泡排序
+            r2_new.setBlocks(i * 10, 0, op_block_num);//存入r2_new
+        }
+
+        int num_r1 = r1.getNumOfBlocks();
+        int num_r2 = r2.getNumOfBlocks();
+        int num_r1_new = r1_new.getNumOfBlocks();
+        int num_r2_new = r2_new.getNumOfBlocks();
+
+        System.out.print("Now the result relation r1 contains: " + "\n");
+        System.out.print(r1+ "\n" + "\n");
+
+        System.out.print("Now the result relation r1_new contains: " + "\n");
+        System.out.print(r1_new+ "\n" + "\n");
+
+        System.out.print("Now the result relation r2 contains: " + "\n");
+        System.out.print(r2+ "\n" + "\n");
+
+        System.out.print("Now the result relation r2_new contains: " + "\n");
+        System.out.print(r2_new+ "\n" + "\n");
+
+    }
+
+
     private  Relation find_largest_relation(ArrayList<Relation> relations){
         int block_least_num = -1;
         Relation result = null;
@@ -87,47 +243,87 @@ public class ProcessQuery {
         return result;
     }
 
-    private void op_cross_join(Relation r_1, Relation r_2, Relation result_Relation, OperationTree op_tree){
-        int pos_1, pos_2;
-        pos_1 = 0;
-        pos_2 = r_1.getNumOfBlocks();
-        r_1.getBlocks(0, pos_1, r_1.getNumOfBlocks());
-        r_2.getBlocks(0, pos_2, r_2.getNumOfBlocks());
-        Block temp_block_1, temp_block_2;
-        for(int i = 0; i < r_1.getNumOfBlocks(); i ++){
-            temp_block_1 = mem.getBlock(i);
-            for(int j = 0; j < r_2.getNumOfBlocks(); j++){
-                temp_block_2 = mem.getBlock(pos_2 + j);
-                //temp_block_1和temp_block_2分别存储两个的待处理块
-                for(Tuple tuple_1 : temp_block_1.getTuples()){
-                    for(Tuple tuple_2 : temp_block_2.getTuples()){
-                        Tuple new_tuple = result_Relation.createTuple();
-                        for(int tuple_offset = 0; tuple_offset < tuple_1.getNumOfFields(); tuple_offset++){
-                            if(tuple_1.getSchema().getFieldType(tuple_offset) == FieldType.INT){
-                                int value = tuple_1.getField(tuple_offset).integer;
-                                new_tuple.setField(tuple_offset, value);
-                            }else{
-                                String value = tuple_1.getField(tuple_offset).str;
-                                new_tuple.setField(tuple_offset, value);
-                            }
-                        }
+    private void op_one_pass(Relation r_1, Relation r_2, Relation result_Relation, OperationTree op_tree, String ops){
+        if(r_2 == null){
+            //单独对r_1进行操作
 
-                        for(int tuple_offset = 0; tuple_offset < tuple_2.getNumOfFields(); tuple_offset++){
-                            if(tuple_2.getSchema().getFieldType(tuple_offset) == FieldType.INT){
-                                int value = tuple_2.getField(tuple_offset).integer;
-                                new_tuple.setField(tuple_offset + tuple_1.getNumOfFields(), value);
-                            }else{
-                                String value = tuple_2.getField(tuple_offset).str;
-                                new_tuple.setField(tuple_offset + tuple_1.getNumOfFields(), value);
-                            }
-                        }
-                        if(op_tree == null) { //如果没有where条件
-                            appendTupleToRelation(result_Relation, mem, 9, new_tuple); //用第10个内存块进行操作
-                        }else{
-                            if(where_test(op_tree, new_tuple, result_Relation)){
-                                appendTupleToRelation(result_Relation, mem, 9, new_tuple);
-                            }
-                        }
+        }
+
+        int block_num_1 = r_1.getNumOfBlocks();
+        int block_num_2 = r_2.getNumOfBlocks();
+        boolean r_1_isLarge = false;
+        Relation R, S; //R是较小的块， S是较大的块
+        if(block_num_1 >= block_num_2){
+            r_1_isLarge = true;
+            R = r_2;
+            S = r_1;
+        }else{
+            R = r_1;
+            S = r_2;
+        }
+
+        //用第9个块依次存较大的个数，用剩余的块依次存较小的内容(如果本身小于8个就直接全部放入了）。使用one pass
+        int scan_times_R= (R.getNumOfBlocks() - 1) / 8 + 1;
+        int op_block_num;
+        for(int i = 0; i < scan_times_R; i++){
+            if((i+1) * 8 > R.getNumOfBlocks()){
+                op_block_num = R.getNumOfBlocks() - i * 8;
+            }else {
+                op_block_num = 8;
+            }
+            R.getBlocks(i * 8, 0, op_block_num); //将R中至多8个块存入。
+            for(int j = 0; j < S.getNumOfBlocks(); j++){
+                S.getBlock(j, 8);
+                Block block_S = mem.getBlock(8);
+                for(int k = 0; k < op_block_num; k++){
+                    Block block_R = mem.getBlock(k);
+                    if(r_1_isLarge){
+                        meta_two_block_op(block_S, block_R, result_Relation, op_tree, ops);
+                    }else{
+                        meta_two_block_op(block_R, block_S, result_Relation, op_tree, ops);
+                    }
+                }
+            }
+        }
+    }
+
+    private void meta_two_block_op(Block b_1, Block b_2, Relation relation, OperationTree op_tree, String ops){
+        //进行操作
+        switch (ops) {
+            case "cross_join":
+                meta_cross_join(b_1, b_2, relation, op_tree);
+                break;
+        }
+    }
+
+    private void meta_cross_join(Block b_1, Block b_2, Relation result_Relation, OperationTree op_tree){
+        for(Tuple tuple_1 : b_1.getTuples()){
+            for(Tuple tuple_2 : b_2.getTuples()){
+                Tuple new_tuple = result_Relation.createTuple();
+                for(int tuple_offset = 0; tuple_offset < tuple_1.getNumOfFields(); tuple_offset++){
+                    if(tuple_1.getSchema().getFieldType(tuple_offset) == FieldType.INT){
+                        int value = tuple_1.getField(tuple_offset).integer;
+                        new_tuple.setField(tuple_offset, value);
+                    }else{
+                        String value = tuple_1.getField(tuple_offset).str;
+                        new_tuple.setField(tuple_offset, value);
+                    }
+                }
+
+                for(int tuple_offset = 0; tuple_offset < tuple_2.getNumOfFields(); tuple_offset++){
+                    if(tuple_2.getSchema().getFieldType(tuple_offset) == FieldType.INT){
+                        int value = tuple_2.getField(tuple_offset).integer;
+                        new_tuple.setField(tuple_offset + tuple_1.getNumOfFields(), value);
+                    }else{
+                        String value = tuple_2.getField(tuple_offset).str;
+                        new_tuple.setField(tuple_offset + tuple_1.getNumOfFields(), value);
+                    }
+                }
+                if(op_tree == null) { //如果没有where条件
+                    appendTupleToRelation(result_Relation, mem, 9, new_tuple); //用第10个内存块进行操作
+                }else{
+                    if(where_test(op_tree, new_tuple, result_Relation)){
+                        appendTupleToRelation(result_Relation, mem, 9, new_tuple);
                     }
                 }
             }
@@ -201,8 +397,7 @@ public class ProcessQuery {
 
         Schema schema_new = new Schema(field_names, field_types);
         Relation result_relation = schema_manager.createRelation(name_new, schema_new);
-
-        op_cross_join(relation_1, relation_2, result_relation, op_tree);
+        op_one_pass(relation_1, relation_2, result_relation, op_tree, "cross_join");
 
         if(!isBottom){
             schema_manager.deleteRelation(name_old);
@@ -318,7 +513,12 @@ public class ProcessQuery {
 //                return  result_relation;
             }
         }else{
+
+            natural_join(schema_manager.getRelation(select_array.table_List.get(0)), schema_manager.getRelation(select_array.table_List.get(1)),
+                    null, "exam");
             ArrayList<Relation> relations = new ArrayList<Relation>();
+
+
             for(String temp_r : select_array.table_List){
                 relations.add(schema_manager.getRelation(temp_r));
             } //得到新的list包含所有的关系
