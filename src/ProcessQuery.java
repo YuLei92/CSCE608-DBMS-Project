@@ -104,13 +104,17 @@ public class ProcessQuery {
             for (int end_block_num = op_block_num - 1; end_block_num >= 0; end_block_num--) {
                 for (int end_tuple_num = mem.getBlock(end_block_num).getNumTuples() - 1; end_tuple_num >= 0; end_tuple_num--) {
                     for (int curr_block_num = 0; curr_block_num <= end_block_num; curr_block_num++) {
-                        curr_block = mem.getBlock(curr_block_num);
+                        curr_block = mem.getBlock(curr_block_num); //得到当前block
+                        if(curr_block_num == 0){ //如果是此次循环的第0个block，初始化prev相关内容
+                            prev_block = mem.getBlock(0);
+                            prev_tuple = prev_block.getTuple(0);
+                            prev_tuple_num = 0;
+                        }
+
                         for (int curr_tuple_num = 0; curr_tuple_num <= end_tuple_num; curr_tuple_num++) {
-                            curr_tuple = curr_block.getTuple(curr_tuple_num);
+                            curr_tuple = curr_block.getTuple(curr_tuple_num); //得到当前的tuple
                             if (curr_block_num == 0 && curr_tuple_num == 0) {
-                                prev_block = mem.getBlock(0);
-                                prev_tuple = prev_block.getTuple(0);
-                                continue;
+                                continue;   //如果是最初那个tuple，直接略过
                             }
 
                             int comp_r;
@@ -120,30 +124,19 @@ public class ProcessQuery {
                                 comp_r = prev_tuple.getField(attr).toString().compareTo(curr_tuple.getField(attr).toString());
                             }
 
-                            if (comp_r >= 0) {
+                            if (comp_r >= 0) { //如果需要交换，交换各自block的对应tuple, 并将当前tuple设置为交换后的
                                 Tuple temp_tuple = prev_tuple;
                                 prev_block.setTuple(prev_tuple_num, curr_tuple);
                                 curr_block.setTuple(curr_tuple_num, temp_tuple);
-                                curr_tuple = prev_tuple;
+                                curr_tuple = temp_tuple;
                             }
-/*
-                            System.out.print("After compare, the first tuple: " + "\n");
-                            System.out.print(prev_block.getTuple(prev_tuple_num).getField(attr).toString() + "\n");
-                            System.out.print("After compare, the second tuple: " + "\n");
-                            System.out.print(curr_block.getTuple(curr_tuple_num).getField(attr).toString() + "\n");
-                            System.out.print("\n");
-*/
-                            prev_tuple = curr_tuple;
-//                            prev_block_num = curr_block_num;
-                            prev_tuple_num = curr_tuple_num;
 
+                            prev_tuple = curr_tuple;
+                            prev_block = curr_block;
+                            prev_tuple_num = curr_tuple_num;
+                            //更新prev三件套
                         }
-                        prev_block = curr_block;
-/*
-                        System.out.print("Now the result: " + "\n");
-                        System.out.print(mem.getBlock(end_block_num).getTuple(end_tuple_num).getField(attr).toString() + "\n");
-                        System.out.print("\n");
-                        */
+                        prev_block = mem.getBlock(curr_block_num); //更新block在每次循环后，这里是否需要重新修改？
                     }
                 }
             }//对r1冒泡排序
@@ -166,13 +159,17 @@ public class ProcessQuery {
             for (int end_block_num = op_block_num - 1; end_block_num >= 0; end_block_num--) {
                 for (int end_tuple_num = mem.getBlock(end_block_num).getNumTuples() - 1; end_tuple_num >= 0; end_tuple_num--) {
                     for (int curr_block_num = 0; curr_block_num <= end_block_num; curr_block_num++) {
-                        curr_block = mem.getBlock(curr_block_num);
+                        curr_block = mem.getBlock(curr_block_num); //得到当前block
+                        if(curr_block_num == 0){ //如果是此次循环的第0个block，初始化prev相关内容
+                            prev_block = mem.getBlock(0);
+                            prev_tuple = prev_block.getTuple(0);
+                            prev_tuple_num = 0;
+                        }
+
                         for (int curr_tuple_num = 0; curr_tuple_num <= end_tuple_num; curr_tuple_num++) {
-                            curr_tuple = curr_block.getTuple(curr_tuple_num);
+                            curr_tuple = curr_block.getTuple(curr_tuple_num); //得到当前的tuple
                             if (curr_block_num == 0 && curr_tuple_num == 0) {
-                                prev_block = mem.getBlock(0);
-                                prev_tuple = prev_block.getTuple(0);
-                                continue;
+                                continue;   //如果是最初那个tuple，直接略过
                             }
 
                             int comp_r;
@@ -182,30 +179,19 @@ public class ProcessQuery {
                                 comp_r = prev_tuple.getField(attr).toString().compareTo(curr_tuple.getField(attr).toString());
                             }
 
-                            if (comp_r >= 0) {
+                            if (comp_r >= 0) { //如果需要交换，交换各自block的对应tuple, 并将当前tuple设置为交换后的
                                 Tuple temp_tuple = prev_tuple;
                                 prev_block.setTuple(prev_tuple_num, curr_tuple);
                                 curr_block.setTuple(curr_tuple_num, temp_tuple);
-                                curr_tuple = prev_tuple;
+                                curr_tuple = temp_tuple;
                             }
-/*
-                            System.out.print("After compare, the first tuple: " + "\n");
-                            System.out.print(prev_block.getTuple(prev_tuple_num).getField(attr).toString() + "\n");
-                            System.out.print("After compare, the second tuple: " + "\n");
-                            System.out.print(curr_block.getTuple(curr_tuple_num).getField(attr).toString() + "\n");
-                            System.out.print("\n");
-*/
-                            prev_tuple = curr_tuple;
-//                            prev_block_num = curr_block_num;
-                            prev_tuple_num = curr_tuple_num;
 
+                            prev_tuple = curr_tuple;
+                            prev_block = curr_block;
+                            prev_tuple_num = curr_tuple_num;
+                            //更新prev三件套
                         }
-                        prev_block = curr_block;
-/*
-                        System.out.print("Now the result: " + "\n");
-                        System.out.print(mem.getBlock(end_block_num).getTuple(end_tuple_num).getField(attr).toString() + "\n");
-                        System.out.print("\n");
-                        */
+                        prev_block = mem.getBlock(curr_block_num); //更新block在每次循环后，这里是否需要重新修改？
                     }
                 }
             }//对r2冒泡排序
@@ -228,7 +214,7 @@ public class ProcessQuery {
 
         System.out.print("Now the result relation r2_new contains: " + "\n");
         System.out.print(r2_new+ "\n" + "\n");
-
+        
     }
 
 
