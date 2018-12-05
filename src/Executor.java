@@ -33,8 +33,20 @@ public class Executor {
         System.out.println("\n"+"delete.where_Clause: " );
         System.out.println(parser.delete.where_clause_string );
 
-        System.out.println("\n"+"delete.where op: " );
-        System.out.println(parser.delete.where_Clause);
+
+        System.out.println("\n"+"delete.where_Clause.op: " );
+        System.out.println(parser.delete.where_Clause.op);
+
+        //DELETE FROM course WHERE exam = 100 AND project = 100用这个测试
+        /**System.out.println("\n"+"delete.where_Clause: " );
+        System.out.print(parser.delete.where_Clause.left_tree.left_tree.op + " ");
+        System.out.print(parser.delete.where_Clause.left_tree.op + " ");
+        System.out.print(parser.delete.where_Clause.left_tree.right_tree.op + " ");
+        System.out.print(parser.delete.where_Clause.op + " ");
+        System.out.print(parser.delete.where_Clause.right_tree.left_tree.op + " ");
+        System.out.print(parser.delete.where_Clause.right_tree.op + " ");
+        System.out.print(parser.delete.where_Clause.right_tree.right_tree.op + " ");**/
+
 
         System.out.println("\n"+"select" );
 
@@ -57,6 +69,8 @@ public class Executor {
         System.out.println("\n"+"select.Order_Clause: " );
         System.out.println(parser.select.order_Clause );
 
+        System.out.println("\n"+"select.joinType: " );
+        System.out.println(parser.select.joinType );
 
 
     }

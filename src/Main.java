@@ -28,12 +28,17 @@ public class Main {
                     executor.execute(scan2.nextLine());
                 }
             } else if(model.equalsIgnoreCase("3")){
-                File file = new File("./src/test.txt");
+                File file = new File("./src/test7.txt");
                 Scanner scan2 = new Scanner(new FileInputStream(file));
                 System.out.println("Test the Process Query");
                 System.out.println("Enter lines of commands");
                 while (scan2.hasNextLine()) {
                     process_query.process(scan2.nextLine());
+                }
+            }else if (model.equalsIgnoreCase("4")){
+                System.out.println("Enter lines of commands");
+                while (scan.hasNextLine()) {
+                    process_query.process(scan.nextLine());
                 }
             }
         }catch (FileNotFoundException e) {

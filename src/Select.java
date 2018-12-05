@@ -1,5 +1,6 @@
 import java.util.ArrayList;
 
+
 public class Select {
 
 
@@ -10,6 +11,8 @@ public class Select {
     public String order_Clause;//order后的语句
     public ArrayList<String> select_List; //select-list
     public boolean distinct;
+    public String joinType;
+    public String sameAttribute;
 
     public Select(){
         where_Clause = new OperationTree();
@@ -18,6 +21,8 @@ public class Select {
         table_List = new ArrayList<>();
         where_clause_string = null;
         distinct = false;
+        joinType= null;
+        sameAttribute = null;
     }
 
     public Select(String str){
@@ -27,6 +32,7 @@ public class Select {
         table_List = new ArrayList<>();
         where_clause_string = null;
         distinct = false;
+        joinType = "CrossJoin";
 
         String[] strings = str.split(" ");
         int where_index = -1;
@@ -59,6 +65,24 @@ public class Select {
                 OperationPriority op = new OperationPriority();
                 where_Clause = op.get_operation_tree(where_string);
                 where_clause_string = where_string;
+                if(op.operatorList.size()==0){
+                    if(Character.isLetter(where_Clause.left_tree.op.charAt(0)) && Character.isLetter(where_Clause.right_tree.op.charAt(0))){
+                        joinType = "Nature_Join";
+                        int att_index = where_Clause.left_tree.op.indexOf(".");
+                        sameAttribute = where_Clause.left_tree.op.substring(att_index+1);
+
+
+                    }
+                }
+                else {
+                    for (int i = 0; i < op.operatorList.size(); i++) {
+                        if (Character.isLetter(this.where_Clause.operationTreeList().get(i).left_tree.op.charAt(0)) && Character.isLetter(this.where_Clause.operationTreeList().get(i).right_tree.op.charAt(0))&& this.where_Clause.operationTreeList().get(i).right_tree.op.length()>1) {
+                            joinType = "Nature_Join";
+                            int att_index = where_Clause.operationTreeList().get(i).left_tree.op.indexOf(".");
+                            sameAttribute = where_Clause.operationTreeList().get(i).left_tree.op.substring(att_index+1);
+                        }
+                    }
+                }
             }
             if(order_index > -1) {//有where 有order
 
@@ -74,10 +98,26 @@ public class Select {
                 OperationPriority op = new OperationPriority();
                 where_Clause = op.get_operation_tree(where_string);
                 where_clause_string = where_string;
+                if(op.operatorList.size()==0){
+                    if(Character.isLetter(where_Clause.left_tree.op.charAt(0)) && Character.isLetter(where_Clause.right_tree.op.charAt(0))){
+                        joinType = "Nature_Join";
+                        int att_index = where_Clause.left_tree.op.indexOf(".");
+                        sameAttribute = where_Clause.left_tree.op.substring(att_index+1);
+                    }
+                }
+                else {
+                    for (int i = 0; i < op.operatorList.size(); i++) {
+                        if (Character.isLetter(this.where_Clause.operationTreeList().get(i).left_tree.op.charAt(0)) && Character.isLetter(this.where_Clause.operationTreeList().get(i).right_tree.op.charAt(0)) && this.where_Clause.operationTreeList().get(i).right_tree.op.length()>1) {
+                            joinType = "Nature_Join";
+                            int att_index = where_Clause.operationTreeList().get(i).left_tree.op.indexOf(".");
+                            sameAttribute = where_Clause.operationTreeList().get(i).left_tree.op.substring(att_index+1);
+                        }
+                    }
+                }
 
                 StringBuilder stringBuilder1 = new StringBuilder();
                 for (int i = order_index + 2; i < strings.length; i++) {//
-                    stringBuilder1.append(strings[i] + " ");
+                    stringBuilder1.append(strings[i] + "");
                 }
                 order_Clause = stringBuilder1.toString();
             }
@@ -96,7 +136,7 @@ public class Select {
 
                 StringBuilder stringBuilder1 = new StringBuilder();
                 for (int i = order_index + 2; i < strings.length; i++) {//
-                    stringBuilder1.append(strings[i] + " ");
+                    stringBuilder1.append(strings[i] + "");
                 }
                 order_Clause = stringBuilder1.toString();
             }

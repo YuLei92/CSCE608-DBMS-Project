@@ -15,6 +15,10 @@ public class ProcessQuery {
     private String r_result = "result_relation";
     private String r_temp = "temp_relation";
 
+    private String NJ_str = "Nature_Join";
+    private String CJ_str = "CrossJoin";
+    private boolean useTwoPass = true;
+
     private Parser parser;
 //    private ArrayList<String> attr_belong = new ArrayList<String>();
     private ArrayList<String> origin_name = new ArrayList<String>();
@@ -36,12 +40,11 @@ public class ProcessQuery {
 
     public void process(String query_){
         query = query_;
-        System.out.print("Test Insert\n");
         parser.commandSplit(query);
         System.out.print("Keyword: " + parser.keyword+"\n");
         System.out.print("TableList: " + parser.table_List+"\n");
         clear_the_temp();
-
+        resetDisk();
         switch (parser.keyword.get(0)){
             case "create" : op_create();
                             break;
@@ -56,20 +59,52 @@ public class ProcessQuery {
 
             default: System.out.println("Nothing to do.\n\n");
         }
+
+        System.out.print("\n\nThe query " + query+" cost I/O and time is shown as below: \n");
+        print_disk();
+
+    }
+
+    private void resetDisk(){
+        disk.resetDiskIOs();
+        disk.resetDiskTimer();
     }
 
     private Relation op_distinct(Relation relation) {
-        Schema r_schema = relation.getSchema();
-        Relation result_relation;
-        if(relation.getRelationName().equals(r_result)){
-            schema_manager.deleteRelation(r_temp);
-            result_relation =  schema_manager.createRelation(r_temp, r_schema);
-        }else{
-            schema_manager.deleteRelation(r_result);
-            result_relation = schema_manager.createRelation(r_result, r_schema);
+
+        if(schema_manager.relationExists("relation_1")){
+            schema_manager.deleteRelation("relation_1");
         }
 
-        Relation temp_relation = schema_manager.createRelation(r_name_1, r_schema);
+        if(schema_manager.relationExists("relation_1")){
+            schema_manager.deleteRelation("relation_2");
+        }
+
+        Schema r_schema = relation.getSchema();
+        Relation result_relation;
+
+        if(relation.getRelationName().equals(r_result)){
+            if(schema_manager.relationExists(r_temp)) {
+ //               result_relation = schema_manager.getRelation(r_temp);
+//                result_relation.deleteBlocks(0);
+                schema_manager.deleteRelation(r_temp);
+                result_relation = schema_manager.createRelation(r_temp, copySchema(r_schema));
+            }else {
+                result_relation = schema_manager.createRelation(r_temp, copySchema(r_schema));
+            }
+        }else{
+            if(schema_manager.relationExists(r_result)) {
+               // result_relation = schema_manager.getRelation(r_result);
+               // result_relation.deleteBlocks(0);
+
+                schema_manager.deleteRelation(r_result);
+                result_relation = schema_manager.createRelation(r_result, copySchema(r_schema));
+            }else {
+                result_relation = schema_manager.createRelation(r_result, copySchema(r_schema));
+            }
+        }
+
+        Relation temp_relation = schema_manager.createRelation(r_name_1, copySchema(r_schema));
         ArrayList<String> dis_op = r_schema.getFieldNames();
 
         int r_block_num = relation.getNumOfBlocks();
@@ -126,10 +161,10 @@ public class ProcessQuery {
             }//对r1冒泡排序
             temp_relation.setBlocks(i * 10, 0, op_block_num);//存入temp_relation
         }
-
+/*
         System.out.print("Now the temp relation contains: " + "\n");
         System.out.print(temp_relation + "\n");
-
+*/
         int r_sublist_index = 0;
         while(r_sublist_index < scan_times){
             temp_relation.getBlock(r_sublist_index * 10, r_sublist_index);
@@ -141,7 +176,7 @@ public class ProcessQuery {
 
         Tuple_node temp = heap.pop();
         heap = move_into_heap_mem(temp, heap, temp_relation.getNumOfBlocks(), temp_relation);
-        appendTupleToRelation(result_relation, mem, 9, temp.tuple);
+        appendTupleToRelation(result_relation, mem, 8, temp.tuple);
 
         while (heap.size > 0) {
             Tuple_node curr = heap.pop();
@@ -152,6 +187,7 @@ public class ProcessQuery {
             }
         }
 
+
         if(schema_manager.relationExists("r_name_1")){
             schema_manager.deleteRelation("r_name_1");
         }
@@ -159,15 +195,28 @@ public class ProcessQuery {
         if(schema_manager.relationExists(temp_relation.getRelationName())){
             schema_manager.deleteRelation(temp_relation.getRelationName());
         }
-
+/*
         System.out.print("Now the memory contains: " + "\n");
         System.out.print(mem + "\n");
 
         System.out.print("Now the distinct relation contains: " + "\n");
         System.out.print(result_relation + "\n");
         System.out.println("Test end.");
+        */
+//        print_disk();
 
         return result_relation;
+    }
+
+    private void print_disk(){
+        System.out.print("*********************************************" + "\n\n");
+        System.out.print("The disk I/O is : " + "\n");
+        System.out.print(disk.getDiskIOs() + "\n\n");
+
+        System.out.print("The disk Timer is: " + "\n");
+        System.out.print(disk.getDiskTimer() + "\n");
+        System.out.println("Test end.\n");
+        System.out.print("*********************************************" + "\n\n");
     }
 
     private void clear_the_temp(){
@@ -194,17 +243,50 @@ public class ProcessQuery {
 
     //进行除重并输出
     private Relation two_pass_orderby(Relation r, String attr){
+
+        r.getBlock(0,0);
+        Block currblock = mem.getBlock(0);
+
+        if(schema_manager.relationExists("relation_1")){
+            schema_manager.deleteRelation("relation_1");
+        }
+
+        if(schema_manager.relationExists("relation_2")){
+            schema_manager.deleteRelation("relation_2");
+        }
+
+//        r.getBlock(0,0);
+//        Block currblock = mem.getBlock(0);
+
         List<String> attrs = new LinkedList<String>();
         attrs.add(attr);
-        clear_the_temp();
-        Schema r_schema = r.getSchema();
-        Relation temp_relation = schema_manager.createRelation(r_temp, r_schema);
+        //clear_the_temp();
+        Schema r_schema = schema_manager.getSchema(r.getRelationName());
+        Relation temp_relation;
+
+        if(r.getRelationName().equals(r_temp)){
+            if(schema_manager.relationExists(r_result)) {
+                temp_relation = schema_manager.getRelation(r_result);
+                temp_relation.deleteBlocks(0);
+            }else {
+                temp_relation = schema_manager.createRelation(r_result, copySchema(r_schema));
+            }
+        }else{
+            if(schema_manager.relationExists(r_temp)) {
+                temp_relation = schema_manager.getRelation(r_temp);
+                temp_relation.deleteBlocks(0);
+            }else {
+                temp_relation = schema_manager.createRelation(r_temp, copySchema(r_schema));
+            }
+        }
+
         int r_block_num = r.getNumOfBlocks();
 
         int scan_times = (r_block_num - 1) / 10 + 1; //计算需要进行多少次scan
         int op_block_num; //存储每次对多少个block进行操作
 
         FieldType attr_type = r.getSchema().getFieldType(attr);
+
 
         for(int i = 0; i < scan_times; i++) {
             if ((i + 1) * 10 > r_block_num) {
@@ -217,6 +299,24 @@ public class ProcessQuery {
             Block curr_block, prev_block;
             Tuple curr_tuple, prev_tuple;
             prev_block = mem.getBlock(0);
+
+
+            System.out.print("Now the relation name contains: " + "\n");
+            System.out.print(r.getRelationName() + "\n");
+            System.out.println("Test end.");
+
+            System.out.print("Now the schema os: " + "\n");
+            System.out.print(r.getSchema().getFieldNames()+ "\n");
+            System.out.println("Test end.");
+
+            System.out.print("Now is: " + "\n");
+            System.out.print(schema_manager.relationExists(r.getRelationName())+ "\n");
+            System.out.println("Test end.");
+
+            System.out.print("Now size is: " + "\n");
+            System.out.print(r.getSchema().getFieldNames().size()+ "\n");
+            System.out.println("Test end.");
+
             prev_tuple = prev_block.getTuple(0);
             for (int end_block_num = op_block_num - 1; end_block_num >= 0; end_block_num--) {
                 for (int end_tuple_num = mem.getBlock(end_block_num).getNumTuples() - 1; end_tuple_num >= 0; end_tuple_num--) {
@@ -264,7 +364,23 @@ public class ProcessQuery {
         System.out.print(temp_relation+ "\n");
         System.out.println("Test end.");
 
-        Relation result_relation = schema_manager.createRelation(r_result, r_schema);
+        Relation result_relation;
+        if(temp_relation.getRelationName().equals(r_result)){
+            if(schema_manager.relationExists(r_temp)) {
+                result_relation = schema_manager.getRelation(r_temp);
+                result_relation.deleteBlocks(0);
+            }else {
+                result_relation = schema_manager.createRelation(r_temp, copySchema(r_schema));
+            }
+        }else{
+            if(schema_manager.relationExists(r_result)) {
+                result_relation = schema_manager.getRelation(r_result);
+                result_relation.deleteBlocks(0);
+            }else {
+                result_relation = schema_manager.createRelation(r_result, copySchema(r_schema));
+            }
+        }
+
         int r_max = (temp_relation.getNumOfBlocks() - 1 )/10 + 1;
         heapHelper helper = new heapHelper(r_max, attrs);
         int r_sublist_index = 0;
@@ -285,11 +401,11 @@ public class ProcessQuery {
             System.out.print(result_relation.getNumOfTuples() + "\n");
             System.out.println("Test end.");
         }
-
-        if(schema_manager.relationExists("temp_relation")){
-            schema_manager.deleteRelation("temp_relation");
+/*
+        if(schema_manager.relationExists(temp_relation.getRelationName())){
+            schema_manager.deleteRelation(temp_relation.getRelationName());
         } //删除temp的
-
+*/
 
         System.out.print("Now the memory contains: " + "\n");
         System.out.print(mem + "\n");
@@ -305,16 +421,23 @@ public class ProcessQuery {
         return  result_relation;
     }
 
-    private void natural_join(Relation r1, Relation r2, Relation result_r, String attr){
-        OperationTree op_tree = null;
+    private Schema copySchema(Schema old){
+        ArrayList<String> field_names = old.getFieldNames();
+        ArrayList<FieldType> field_types = old.getFieldTypes();
+        Schema result = new Schema(field_names, field_types);
+        return result;
+    }
+
+    private Relation natural_join(Relation r1, Relation r2, String attr, OperationTree op){
+        OperationTree op_tree = op;
         FieldType attr_type = r1.getSchema().getFieldType(attr);
         String r1_temp_name = r_name_1;
         String r2_temp_name = r_name_2;
         //先依次对r1, r2进行sort，然后存回。
         Schema r1_schema = r1.getSchema();
         Schema r2_schema = r2.getSchema();
-        Relation r1_new = schema_manager.createRelation(r_name_1, r1_schema);
-        Relation r2_new = schema_manager.createRelation(r_name_2, r2_schema);
+        Relation r1_new = schema_manager.createRelation(r_name_1, copySchema(r1_schema));
+        Relation r2_new = schema_manager.createRelation(r_name_2, copySchema(r2_schema));
         int r1_block_num = r1.getNumOfBlocks();
         int r2_block_num = r2.getNumOfBlocks();
         int scan_times = (r1_block_num - 1) / 10 + 1; //计算需要进行多少次scan
@@ -348,6 +471,8 @@ public class ProcessQuery {
                             }
 
                             int comp_r;
+                            int prev_value = prev_tuple.getField(attr).integer;
+                            int curr_value = curr_tuple.getField(attr).integer;
                             if(attr_type == FieldType.INT){
                                 comp_r = prev_tuple.getField(attr).integer - curr_tuple.getField(attr).integer;
                             }else{
@@ -359,6 +484,8 @@ public class ProcessQuery {
                                 prev_block.setTuple(prev_tuple_num, curr_tuple);
                                 curr_block.setTuple(curr_tuple_num, temp_tuple);
                                 curr_tuple = temp_tuple;
+                                System.out.print("Now the memory contains: " + "\n");
+                                System.out.print(mem + "\n");
                             }
 
                             prev_tuple = curr_tuple;
@@ -428,11 +555,13 @@ public class ProcessQuery {
             r2_new.setBlocks(i * 10, 0, op_block_num);//存入r2_new
         }
 
+
+
         int num_r1 = r1.getNumOfBlocks();
         int num_r2 = r2.getNumOfBlocks();
         int num_r1_new = r1_new.getNumOfBlocks();
         int num_r2_new = r2_new.getNumOfBlocks();
-
+/*
         System.out.print("Now the result relation r1 contains: " + "\n");
         System.out.print(r1+ "\n" + "\n");
 
@@ -444,7 +573,7 @@ public class ProcessQuery {
 
         System.out.print("Now the result relation r2_new contains: " + "\n");
         System.out.print(r2_new+ "\n" + "\n");
-
+*/
         for(int i = 0; i < 10; i++){
             Block temp_block = mem.getBlock(i);
             temp_block.clear();
@@ -466,8 +595,8 @@ public class ProcessQuery {
         for(String new_name : r2_new.getSchema().getFieldNames()){
             if(origin_name.contains(new_name)){ //如果和加前缀前的名字有重复的
                 int old_pos = origin_name.indexOf(new_name);
-                field_names.set(old_pos, r1_new.getRelationName() + "." + new_name);
-                field_names.add(r2_new.getRelationName() + "." + new_name);
+                field_names.set(old_pos, r1.getRelationName() + "." + new_name);
+                field_names.add(r2.getRelationName() + "." + new_name);
             }else {
                 field_names.add(new_name);
             }
@@ -532,12 +661,12 @@ public class ProcessQuery {
                 do {
                     temp1 = helper1.pop();
                     helper1 = move_into_heap_mem(temp1, helper1, r1_new.getNumOfBlocks(), r1_new);
-                } while(helper1.compare_two_node(temp1.tuple, list_1.get(0).tuple) == 0);
+                } while(helper1.compare_two_node(temp1.tuple, list_1.get(0).tuple) == 0 && helper1.size > 0);
 
                 do {
                     temp2 = helper2.pop();
                     helper2 = move_into_heap_mem(temp2, helper2, r2_new.getNumOfBlocks(), r2_new);
-                } while(helper2.compare_two_node(temp2.tuple, list_2.get(0).tuple) == 0);
+                } while(helper2.compare_two_node(temp2.tuple, list_2.get(0).tuple) == 0 && helper2.size > 0);
 
                 meta_natural_join(list_1, list_2, result_relation, op_tree);
 
@@ -555,13 +684,18 @@ public class ProcessQuery {
 
 */
 
+
         if(schema_manager.relationExists("r_name_1")){
             schema_manager.deleteRelation("r_name_1");
-        }
+    }
 
         if(schema_manager.relationExists("r_name_2")){
-            schema_manager.deleteRelation("r_name_2");
-        }
+        schema_manager.deleteRelation("r_name_2");
+    }
+
+        if(schema_manager.relationExists(r1_new.getRelationName())){
+        schema_manager.deleteRelation(r2_new.getRelationName());
+    } //删除temp的
 
         System.out.print("Now the memory contains: " + "\n");
         System.out.print(mem + "\n");
@@ -570,6 +704,7 @@ public class ProcessQuery {
         System.out.print(result_relation + "\n");
         System.out.println("Test end.");
 
+        return result_relation;
         /*
         Tuple_node new_tuple_node = helper.pop();
         System.out.println("The pop node's exam is: " + new_tuple_node.tuple.getField(attr).integer);
@@ -583,7 +718,6 @@ public class ProcessQuery {
         System.out.println("Test end.");
         //测试pop四个，成功
 */
-
 
     }
 
@@ -823,7 +957,8 @@ public class ProcessQuery {
         op_one_pass(relation_1, relation_2, result_relation, op_tree, "cross_join");
 
         if(!isBottom){
-            schema_manager.deleteRelation(name_old);
+
+            schema_manager.getRelation(name_old).deleteBlocks(0);
         }
 
         return  result_relation;
@@ -832,7 +967,7 @@ public class ProcessQuery {
 
 
     //进度：仅仅实现单个table的select
-    private Relation op_select(){
+        private Relation op_select(){
         origin_name.clear();
         Relation result_relation = null;
         Schema result_schema, target_schema;
@@ -852,7 +987,7 @@ public class ProcessQuery {
             //判断如果是简单块
             if(select_array.select_List.size() == 1 && select_array.select_List.get(0).equals("*")){
                 result_schema = schema_manager.getSchema(select_array.table_List.get(0));//得到schema
-                result_relation = schema_manager.createRelation("new_relation",result_schema); //建立一个新的表
+                result_relation = schema_manager.createRelation("new_relation",copySchema(result_schema)); //建立一个新的表
 
                 for(int i = 0; i < scan_times; i ++){
                     if((i+1) * 9 > block_num){
@@ -938,7 +1073,7 @@ public class ProcessQuery {
             }
         }else{
 
-            op_distinct(schema_manager.getRelation(select_array.table_List.get(0)));
+//            op_distinct(schema_manager.getRelation(select_array.table_List.get(0)));
  //           two_pass_orderby(schema_manager.getRelation(select_array.table_List.get(0)), "exam");
        //     natural_join(schema_manager.getRelation(select_array.table_List.get(0)), schema_manager.getRelation(select_array.table_List.get(1)),
 //                    null, "exam");
@@ -951,13 +1086,33 @@ public class ProcessQuery {
 
             Relation temp_relation;
 
-            if(select_array.where_clause_string == null) {
-                //如果没有where
-                temp_relation = crossjoin(relations,null);
+
+
+
+            if(select_array.joinType.equalsIgnoreCase(CJ_str) || useTwoPass == false) {
+                if (select_array.where_clause_string == null) {
+                    //如果没有where
+                    temp_relation = crossjoin(relations, null);
+                } else {
+                    temp_relation = crossjoin(relations, select_array.where_Clause);
+                }
             }else{
-                temp_relation = crossjoin(relations, select_array.where_Clause);
+                if (select_array.where_clause_string == null) {
+                    //如果没有where
+                    temp_relation = natural_join(relations.get(0),relations.get(1), select_array.sameAttribute, null);
+                } else {
+                    temp_relation = natural_join(relations.get(0),relations.get(1), select_array.sameAttribute, select_array.where_Clause);
+                }
             }
 
+/*
+            if (select_array.where_clause_string == null) {
+                //如果没有where
+                temp_relation = crossjoin(relations, null);
+            } else {
+                temp_relation = crossjoin(relations, select_array.where_Clause);
+            }
+*/
             if(select_array.select_List.size() == 1 && select_array.select_List.get(0).equals("*")){
                 //如果多个表但是只有"*"
                 result_relation = temp_relation;
@@ -969,7 +1124,14 @@ public class ProcessQuery {
                     field_types.add(temp_relation.getSchema().getFieldType(field_name));
                 }
                 result_schema = new Schema(field_names, field_types);
-                result_relation = schema_manager.createRelation(r_result, result_schema); //初始化result schema
+                //这里可能需要重新建立！！！！！！！！！
+                if(temp_relation.getRelationName() == r_temp) {
+                    schema_manager.deleteRelation(r_result);
+                    result_relation = schema_manager.createRelation(r_result, result_schema); //初始化result schema
+                }else{
+                    schema_manager.deleteRelation(r_temp);
+                    result_relation = schema_manager.createRelation(r_temp, result_schema);
+                }
 
                 Tuple temp_tuple, new_tuple;
                 int block_num = temp_relation.getNumOfBlocks();
@@ -1008,9 +1170,41 @@ public class ProcessQuery {
             }
         }
 
-        System.out.print("The table currently have " + result_relation.getNumOfTuples() + " tuples" + "\n");
-        System.out.print("Now the result relation contains: " + "\n");
-        System.out.print(result_relation+ "\n" + "\n");
+//        System.out.print("The table currently have " + result_relation.getNumOfTuples() + " tuples" + "\n");
+
+
+
+
+        if(select_array.distinct == true){
+            System.out.print("Now the result relation before distinct contains: " + "\n");
+            System.out.print(result_relation+ "\n" + "\n");
+            result_relation = op_distinct(result_relation);
+            System.out.print("Now the result relation after distinct contains: " + "\n");
+            System.out.print(result_relation+ "\n" + "\n");
+        }
+/*
+        System.out.print("     ************************************      " + "\n\n");
+        System.out.print("Now the result relation name: " + "\n");
+        System.out.print(result_relation.getRelationName() + "\n");
+        System.out.println("Test end.");
+        System.out.print("     ************************************      " + "\n\n");
+
+        System.out.print("     ************************************      " + "\n\n");
+        System.out.print("Now the result relation name: " + "\n");
+        System.out.print(schema_manager.relationExists(result_relation.getRelationName()) + "\n");
+        System.out.println("Test end.");
+        System.out.print("     ************************************      " + "\n\n");
+*/
+
+        if(select_array.order_Clause != null){
+            result_relation = two_pass_orderby(result_relation, select_array.order_Clause);
+        }
+
+        System.out.print("     ************************************      " + "\n\n");
+        System.out.print("Now the select's final relation contains: " + "\n");
+        System.out.print(result_relation + "\n");
+        System.out.println("Test end.");
+        System.out.print("     ************************************      " + "\n\n");
 
         return result_relation;
     }
@@ -1019,7 +1213,7 @@ public class ProcessQuery {
         System.out.print("\nStart to delete.\n");
         String relation_name = parser.table_List.get(0);
         if(parser.delete.where_clause_string == null) { //实现不包含where的情况
-            schema_manager.deleteRelation(relation_name);
+            schema_manager.getRelation(relation_name).deleteBlocks(0); //删除所有的block
 
             System.out.print("\nTable " + relation_name + " has been deleted.\n");
 
@@ -1056,7 +1250,7 @@ public class ProcessQuery {
                         }else{
                             //如果不是最后一个block的填坑情况。
                             if(last_block.getNumTuples() == 0){
-                                target_relation.deleteBlocks(last_num); //删除最后一个block.
+                                target_relation.deleteBlocks(target_relation.getNumOfBlocks() - 1); //删除最后一个block.
                                 target_relation.getBlock(target_relation.getNumOfBlocks() - 1, 9);//找到最后一个block放入最后
                                 last_block = mem.getBlock(9);
                             } //更新block.
@@ -1069,16 +1263,21 @@ public class ProcessQuery {
                     }
                 }
                 target_relation.setBlock(i, 0);
-                if( i != (target_relation.getNumOfBlocks() - 1)){
+                if( i != (target_relation.getNumOfBlocks() - 1)) {
                     //如果不是对最后一个block进行删除操作，传回最后一个block，如果空，直接删除
-                    if(last_block.getNumTuples() != 0) {
+                    if (last_block.getNumTuples() != 0) {
                         target_relation.setBlock(target_relation.getNumOfBlocks() - 1, 9);
-                    }else{
+                    } else {
                         target_relation.deleteBlocks(target_relation.getNumOfBlocks() - 1); //删除最后一个block.
                     }
                 }
 
 //                target_relation.setBlocks(i * 10 + index, 0, op_nums); //将mem中10个blocks传入。
+            }
+
+            target_relation.getBlock(target_relation.getNumOfBlocks() - 1, 0);
+            if(mem.getBlock(0).getNumTuples() == 0){
+                target_relation.deleteBlocks(target_relation.getNumOfBlocks() - 1);
             }
             System.out.print("The table currently have " + target_relation.getNumOfTuples() + " tuples" + "\n");
             System.out.print("Now the result relation contains: " + "\n");
@@ -1221,12 +1420,15 @@ public class ProcessQuery {
                 target_relation.setBlocks(i * 10 + index, 0, op_nums); //将mem中10个blocks传入。
             }
         }
-
+/*
         System.out.print("Now the memory contains: " + "\n");
         System.out.print(mem + "\n");
+        */
+
         System.out.print("Now the relation contains: " + "\n");
         System.out.print(target_relation + "\n" + "\n");
     }
+
     private  void op_drop(){
         System.out.print("\nStart to drop.\n");
         String relation_name = parser.table_List.get(0);
@@ -1264,21 +1466,14 @@ public class ProcessQuery {
         System.out.print("The schema has " + schema.getNumOfFields() + " fields" + "\n");
         System.out.print("The schema allows " + schema.getTuplesPerBlock() + " tuples per block" + "\n");
 
-        System.out.print("\nThe created table has name " + relation_reference.getRelationName() + "\n");
-        System.out.print("The table has schema:" + "\n");
-        System.out.print(relation_reference.getSchema() + "\n");
+        System.out.print("\nFrom the schema manager, the table " + relation_name + " exists: "
+                + (schema_manager.relationExists(relation_name)?"TRUE":"FALSE") + "\n");
+
         System.out.print("The table currently have " + relation_reference.getNumOfBlocks() + " blocks" + "\n");
         System.out.print("The table currently have " + relation_reference.getNumOfTuples() + " tuples" + "\n" + "\n");
 
-        //The following print is just the test.
-        System.out.print("\nCurrent schemas and relations: " + "\n");
-        System.out.print(schema_manager + "\n");
-        System.out.print("\nFrom the schema manager, the table " + relation_name + " exists: "
-                + (schema_manager.relationExists(relation_name)?"TRUE":"FALSE") + "\n");
         System.out.print("\nFrom the schema manager, the table " + relation_name + " has schema:" + "\n");
         System.out.print(schema_manager.getSchema(relation_name) + "\n");
-        System.out.print("\nFrom the schema manager, the table " + relation_name + " has schema:" + "\n");
-        System.out.print(schema_manager.getRelation(relation_name).getSchema() + "\n");
 
     }
 
@@ -1304,9 +1499,7 @@ public class ProcessQuery {
 //                System.out.print("Write to a new block at the end of the relation" + "\n");
                 relation_reference.setBlock(relation_reference.getNumOfBlocks(),memory_block_index); //write back to the relation
             } else {
- //               System.out.print("(The block is not full: Append it directly)" + "\n");
                 block_reference.appendTuple(tuple); // append the tuple
-  //              System.out.print("Write to the last block of the relation" + "\n");
                 relation_reference.setBlock(relation_reference.getNumOfBlocks()-1,memory_block_index); //write back to the relation
             }
         }
