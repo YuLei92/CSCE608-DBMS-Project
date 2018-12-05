@@ -106,14 +106,23 @@ public class heapHelper {
 
 
     //比较两个节点
-    public  int compare_two_node(Tuple curr, Tuple parent){
-        Field field_curr =  curr.getField(compare_attr.get(0));
-        Field field_parent = parent.getField(compare_attr.get(0));
-        if(field_curr.type == FieldType.INT){
-            return field_curr.integer - field_parent.integer;
-        }else{
-            return field_curr.str.compareTo(field_parent.str);
+    public  int compare_two_node(Tuple curr, Tuple parent) {
+        for (int i = 0; i < compare_attr.size(); i++) {
+            Field field_curr = curr.getField(compare_attr.get(i));
+            Field field_parent = parent.getField(compare_attr.get(i));
+            if (field_curr.type == FieldType.INT) {
+                int result = field_curr.integer - field_parent.integer;
+                if (result != 0) {
+                    return result;
+                }
+            } else {
+                int result = field_curr.str.compareTo(field_parent.str);
+                if (result != 0) {
+                    return result;
+                }
+            }
         }
+        return 0;
     }
 
 }
